@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import secrets
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -13,6 +14,7 @@ from fastapi import BackgroundTasks, FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from psycopg.errors import UniqueViolation
 
 load_dotenv()
 
@@ -21,11 +23,20 @@ from . import db, matching, payments_client, sms_client, telegram_client  # noqa
 log = logging.getLogger("cossa_dues")
 
 APP_DIR = Path(__file__).parent
-MIGRATION_SQL = (APP_DIR.parent / "migrations" / "001_dues_schema.sql").read_text()
+MIGRATIONS_DIR = APP_DIR.parent / "migrations"
+MIGRATION_FILES = ["001_dues_schema.sql", "002_receipt_links_and_webhook_log.sql"]
 
 CONTINUING_AMOUNT = float(os.environ.get("DUES_AMOUNT_CONTINUING", "50"))
 FRESHER_AMOUNT = float(os.environ.get("DUES_AMOUNT_FRESHER", "100"))
 APP_BASE_URL = os.environ.get("APP_BASE_URL", "").rstrip("/")
+
+# Excludes 0/O/1/l/I so a code read out or texted never gets misread.
+SHORT_CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz"
+
+
+def generate_short_code(length: int = 7) -> str:
+    return "".join(secrets.choice(SHORT_CODE_ALPHABET) for _ in range(length))
+
 
 app = FastAPI(title="COSSA Dues Portal")
 app.mount("/static", StaticFiles(directory=str(APP_DIR / "static")), name="static")
@@ -35,7 +46,8 @@ templates = Jinja2Templates(directory=str(APP_DIR / "templates"))
 @app.on_event("startup")
 def run_migrations():
     with db.pool.connection() as conn:
-        conn.execute(MIGRATION_SQL)
+        for filename in MIGRATION_FILES:
+            conn.execute((MIGRATIONS_DIR / filename).read_text())
         conn.execute("DELETE FROM dues.pending_checks WHERE created_at < now() - interval '1 day'")
 
 
@@ -174,19 +186,29 @@ def pay(request: Request, token: str = Form(...)):
                 },
             )
             checkout_url = resp["checkout_url"]
-            conn.execute(
-                """
-                INSERT INTO dues.payments
-                    (reference, full_name, student_id, matched_user_id, match_type,
-                     department, program, phone_number, email, amount, status, checkout_url)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'pending',%s)
-                """,
-                (
-                    reference, chk["full_name"], chk["student_id"], chk["matched_user_id"], chk["match_type"],
-                    chk["department"], chk["program"], chk["phone_number"], chk["email"], chk["amount"],
-                    checkout_url,
-                ),
-            )
+
+            for _ in range(5):
+                short_code = generate_short_code()
+                try:
+                    conn.execute(
+                        """
+                        INSERT INTO dues.payments
+                            (reference, full_name, student_id, matched_user_id, match_type,
+                             department, program, phone_number, email, amount, status,
+                             checkout_url, short_code)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'pending',%s,%s)
+                        """,
+                        (
+                            reference, chk["full_name"], chk["student_id"], chk["matched_user_id"],
+                            chk["match_type"], chk["department"], chk["program"], chk["phone_number"],
+                            chk["email"], chk["amount"], checkout_url, short_code,
+                        ),
+                    )
+                    break
+                except UniqueViolation:
+                    continue
+            else:
+                raise HTTPException(500, "Could not allocate a receipt code, please try again")
 
     return RedirectResponse(checkout_url, status_code=303)
 
@@ -228,12 +250,22 @@ def receipt(request: Request, reference: str):
     return templates.TemplateResponse("pending.html", {"request": request, "payment": row})
 
 
+@app.get("/r/{code}")
+def short_receipt_link(code: str):
+    # Short, separately-random code (not the reference itself) so the SMS
+    # link fits in one 160-char segment regardless of how long the domain is.
+    with db.pool.connection() as conn:
+        row = conn.execute("SELECT reference FROM dues.payments WHERE short_code = %s", (code,)).fetchone()
+    if not row:
+        raise HTTPException(404)
+    return RedirectResponse(f"/receipt/{row['reference']}", status_code=302)
+
+
 def fulfil_payment(payment: dict):
-    message = (
-        f"COSSA Dues receipt\nRef: {payment['reference']}\n"
-        f"Name: {payment['full_name']}\nAmount: GHS {float(payment['amount']):.2f}\n"
-        "Status: PAID. Thank you."
-    )
+    link = f"{APP_BASE_URL}/r/{payment['short_code']}"
+    message = f"COSSA Dues: GHS {float(payment['amount']):.2f} received. Receipt: {link}"
+    if len(message) > 160:
+        log.warning("SMS receipt for %s is %d chars — will bill as 2+ segments", payment["reference"], len(message))
     try:
         sms_client.send_sms(payment["phone_number"], message)
         with db.pool.connection() as conn:
@@ -265,15 +297,27 @@ async def sasusync_webhook(request: Request, background_tasks: BackgroundTasks):
     secret = os.environ["SASUSYNC_WEBHOOK_SECRET"]
     expected = hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
     signature = request.headers.get("X-Webhook-Signature", "")
+    verified = hmac.compare_digest(signature, expected)
 
-    if not hmac.compare_digest(signature, expected):
-        # 200 so SasuSync stops retrying a delivery that will never verify.
-        return {"status": 0}
-
-    payload = json.loads(raw)
+    try:
+        payload = json.loads(raw)
+    except ValueError:
+        payload = {}
     event = payload.get("event")
     data = payload.get("data", {})
     reference = data.get("reference")
+
+    # Logged regardless of outcome, so a future admin page has the full
+    # webhook history to fall back on without any extra instrumentation.
+    with db.pool.connection() as conn:
+        conn.execute(
+            "INSERT INTO dues.webhook_events (event, reference, verified, raw_body) VALUES (%s,%s,%s,%s)",
+            (event, reference, verified, raw.decode("utf-8", "replace")),
+        )
+
+    if not verified:
+        # 200 so SasuSync stops retrying a delivery that will never verify.
+        return {"status": 0}
     if not reference:
         return {"status": 0}
 
