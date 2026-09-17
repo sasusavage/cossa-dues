@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Pay Your Dues — COSSA{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>Pay your departmental dues</h2>
+  <p class="lede">Enter your details exactly as they appear in the school records.</p>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <form method="post" action="/check">
+    <label>Full name (as in school records)
+      <input type="text" name="full_name" value="{{ full_name or '' }}" autocomplete="name" required>
+    </label>
+    <label>Student ID
+      <input type="text" name="student_id" value="{{ student_id or '' }}" required>
+    </label>
+    <label>Phone number
+      <input type="tel" name="phone_number" value="{{ phone_number or '' }}" autocomplete="tel" required>
+    </label>
+    <label>Personal email <span class="optional">(optional)</span>
+      <input type="email" name="email" value="{{ email or '' }}" autocomplete="email">
+    </label>
+    <button type="submit">Continue</button>
+  </form>
+  <p class="alt-link">Something not matching up? <a href="/issue">Report an issue instead</a></p>
+</div>
+{% endblock %}

@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Payment failed — COSSA Dues{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>Payment didn&rsquo;t go through</h2>
+  <p class="lede">Reference: {{ payment.reference }}</p>
+  <p><a href="/">Try again</a> or <a href="/issue">report an issue</a>.</p>
+</div>
+{% endblock %}

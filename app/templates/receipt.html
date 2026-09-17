@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Receipt — COSSA Dues{% endblock %}
+{% block content %}
+<div class="card receipt">
+  <p class="paid-badge">PAID</p>
+  <h2>Payment confirmed</h2>
+  <table class="summary">
+    <tr><th>Reference</th><td>{{ payment.reference }}</td></tr>
+    <tr><th>Name</th><td>{{ payment.full_name }}</td></tr>
+    <tr><th>Student ID</th><td>{{ payment.student_id }}</td></tr>
+    <tr><th>Amount</th><td>GHS {{ "%.2f"|format(payment.amount) }}</td></tr>
+    <tr><th>Paid at</th><td>{{ payment.paid_at }}</td></tr>
+  </table>
+  <p class="hint">A copy of this receipt has been sent to {{ payment.phone_number }} by SMS.</p>
+  <button class="secondary" onclick="window.print()">Print / save receipt</button>
+</div>
+{% endblock %}

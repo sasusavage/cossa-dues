@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}COSSA Dues Portal{% endblock %}</title>
+<link rel="icon" href="/static/cossa-logo.jpeg" type="image/jpeg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <img src="/static/cossa-logo.jpeg" alt="COSSA logo" class="logo">
+    <div class="site-title">
+      <h1>COSSA Dues Portal</h1>
+      <p class="sub">Computing Science Students&rsquo; Association &middot; Valley View University</p>
+    </div>
+  </header>
+  <main class="content">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="site-footer">
+    <p>Powered by <a href="https://sasusync.com" target="_blank" rel="noopener">SasuSync.com</a> in partnership with COSSA</p>
+  </footer>
+</body>
+</html>

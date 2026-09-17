@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Confirming payment — COSSA Dues{% endblock %}
+{% block content %}
+<meta http-equiv="refresh" content="4">
+<div class="card">
+  <h2>Confirming your payment&hellip;</h2>
+  <p class="lede">Reference: {{ payment.reference }}</p>
+  <p>This page refreshes on its own. It can take up to a minute after paying.</p>
+</div>
+{% endblock %}

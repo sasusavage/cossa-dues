@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Confirm — COSSA Dues{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>Confirm your details</h2>
+  <p class="lede">We found you as a <strong>{{ category_label }}</strong>.</p>
+  <table class="summary">
+    <tr><th>Name</th><td>{{ full_name }}</td></tr>
+    <tr><th>Amount due</th><td>GHS {{ "%.2f"|format(amount) }}</td></tr>
+  </table>
+  <form method="post" action="/pay">
+    <input type="hidden" name="token" value="{{ token }}">
+    <button type="submit">Proceed to pay GHS {{ "%.2f"|format(amount) }}</button>
+  </form>
+  <p class="alt-link">Not right? <a href="/issue">Report an issue instead</a></p>
+</div>
+{% endblock %}
