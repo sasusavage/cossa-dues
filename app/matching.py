@@ -2,7 +2,7 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 
-USER_FIELDS = "id, student_id, surname, firstname, othernames, department, program"
+USER_FIELDS = "id, student_id, surname, firstname, othernames, username, department, program"
 
 
 def normalize_name(name: str) -> set:
@@ -12,8 +12,15 @@ def normalize_name(name: str) -> set:
 
 
 def _db_name_words(row: dict) -> set:
+    # Most rows have surname/firstname/othernames split out, but a batch of
+    # accounts only ever got a full name in `username` — fall back to that
+    # rather than treating them as nameless (they're real continuing
+    # students, just missing the split fields).
     parts = " ".join(p for p in [row.get("surname"), row.get("firstname"), row.get("othernames")] if p)
-    return normalize_name(parts)
+    words = normalize_name(parts)
+    if not words and row.get("username"):
+        words = normalize_name(row["username"])
+    return words
 
 
 @dataclass
