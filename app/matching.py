@@ -40,6 +40,8 @@ def find_match(conn, full_name: str, student_id: str) -> MatchResult:
       where the student's ID changed but they're the same person).
     - More than one name-only candidate -> ambiguous; routed to the manual
       issue form rather than guessing which record is theirs.
+    - Not found in `users` at all, but an admin has vouched for this
+      student_id in dues.manual_overrides -> continuing_override.
     - No match at all -> fresher.
     """
     sid = student_id.strip().upper()
@@ -61,5 +63,13 @@ def find_match(conn, full_name: str, student_id: str) -> MatchResult:
         return MatchResult("continuing_name_only", candidates[0])
     if len(candidates) > 1:
         return MatchResult("ambiguous")
+
+    override = conn.execute(
+        "SELECT full_name FROM dues.manual_overrides WHERE UPPER(student_id) = %s", (sid,)
+    ).fetchone()
+    if override:
+        override_words = normalize_name(override["full_name"])
+        if override_words and override_words.issubset(input_words):
+            return MatchResult("continuing_override", {"id": None, "department": None, "program": None})
 
     return MatchResult("fresher")

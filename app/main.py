@@ -24,7 +24,9 @@ log = logging.getLogger("cossa_dues")
 
 APP_DIR = Path(__file__).parent
 MIGRATIONS_DIR = APP_DIR.parent / "migrations"
-MIGRATION_FILES = ["001_dues_schema.sql", "002_receipt_links_and_webhook_log.sql"]
+MIGRATION_FILES = ["001_dues_schema.sql", "002_receipt_links_and_webhook_log.sql", "003_manual_overrides.sql"]
+
+CONTINUING_MATCH_KINDS = ("continuing_exact", "continuing_name_only", "continuing_override")
 
 CONTINUING_AMOUNT = float(os.environ.get("DUES_AMOUNT_CONTINUING", "50"))
 FRESHER_AMOUNT = float(os.environ.get("DUES_AMOUNT_FRESHER", "100"))
@@ -61,7 +63,7 @@ def sanitize_ref_part(s: str) -> str:
 
 
 def category_label(match_kind: str) -> str:
-    return "Continuing Student" if match_kind in ("continuing_exact", "continuing_name_only") else "New / Fresher Student"
+    return "Continuing Student" if match_kind in CONTINUING_MATCH_KINDS else "New / Fresher Student"
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -105,7 +107,7 @@ def check(
             },
         )
 
-    amount = CONTINUING_AMOUNT if result.kind in ("continuing_exact", "continuing_name_only") else FRESHER_AMOUNT
+    amount = CONTINUING_AMOUNT if result.kind in CONTINUING_MATCH_KINDS else FRESHER_AMOUNT
     user = result.user
 
     token = uuid.uuid4().hex
