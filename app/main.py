@@ -24,7 +24,10 @@ log = logging.getLogger("cossa_dues")
 
 APP_DIR = Path(__file__).parent
 MIGRATIONS_DIR = APP_DIR.parent / "migrations"
-MIGRATION_FILES = ["001_dues_schema.sql", "002_receipt_links_and_webhook_log.sql", "003_manual_overrides.sql"]
+MIGRATION_FILES = [
+    "001_dues_schema.sql", "002_receipt_links_and_webhook_log.sql",
+    "003_manual_overrides.sql", "004_expenses.sql",
+]
 
 CONTINUING_MATCH_KINDS = ("continuing_exact", "continuing_name_only", "continuing_override")
 
@@ -249,6 +252,8 @@ def receipt(request: Request, reference: str):
         return templates.TemplateResponse("receipt.html", {"request": request, "payment": row})
     if row["status"] == "failed":
         return templates.TemplateResponse("failed.html", {"request": request, "payment": row})
+    if row["status"] == "voided":
+        raise HTTPException(410, "This payment record has been voided")
     return templates.TemplateResponse("pending.html", {"request": request, "payment": row})
 
 
