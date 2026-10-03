@@ -85,12 +85,12 @@ def check(
     full_name = full_name.strip()
     student_id = student_id.strip()
     phone_number = phone_number.strip()
-    email = email.strip() or None
+    email = email.strip()
 
-    if not full_name or not student_id or not phone_number:
+    if not full_name or not student_id or not phone_number or not email:
         return templates.TemplateResponse(
             "index.html",
-            {"request": request, "error": "Full name, student ID and phone number are all required."},
+            {"request": request, "error": "Full name, student ID, phone number and email are all required."},
         )
 
     with db.pool.connection() as conn:
