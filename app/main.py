@@ -26,13 +26,14 @@ APP_DIR = Path(__file__).parent
 MIGRATIONS_DIR = APP_DIR.parent / "migrations"
 MIGRATION_FILES = [
     "001_dues_schema.sql", "002_receipt_links_and_webhook_log.sql",
-    "003_manual_overrides.sql", "004_expenses.sql",
+    "003_manual_overrides.sql", "004_expenses.sql", "005_tshirt_option.sql",
 ]
 
 CONTINUING_MATCH_KINDS = ("continuing_exact", "continuing_name_only", "continuing_override")
 
 CONTINUING_AMOUNT = float(os.environ.get("DUES_AMOUNT_CONTINUING", "50"))
 FRESHER_AMOUNT = float(os.environ.get("DUES_AMOUNT_FRESHER", "100"))
+TSHIRT_AMOUNT = float(os.environ.get("TSHIRT_AMOUNT", "55"))
 APP_BASE_URL = os.environ.get("APP_BASE_URL", "").rstrip("/")
 
 # Excludes 0/O/1/l/I so a code read out or texted never gets misread.
@@ -139,12 +140,14 @@ def check(
             "category_label": category_label(result.kind),
             "amount": amount,
             "full_name": full_name,
+            "can_tshirt": result.kind in CONTINUING_MATCH_KINDS,
+            "tshirt_amount": TSHIRT_AMOUNT,
         },
     )
 
 
 @app.post("/pay")
-def pay(request: Request, token: str = Form(...)):
+def pay(request: Request, token: str = Form(...), tshirt: str = Form("")):
     with db.pool.connection() as conn:
         chk = conn.execute("SELECT * FROM dues.pending_checks WHERE token = %s", (token,)).fetchone()
 
@@ -152,6 +155,10 @@ def pay(request: Request, token: str = Form(...)):
             return templates.TemplateResponse(
                 "index.html", {"request": request, "error": "That check has expired — please try again."}
             )
+
+        # T-shirts are only offered to continuing students; freshers collect theirs from the VP.
+        wants_tshirt = bool(tshirt) and chk["match_type"] in CONTINUING_MATCH_KINDS
+        amount = float(chk["amount"]) + (TSHIRT_AMOUNT if wants_tshirt else 0)
 
         if chk["matched_user_id"]:
             identity_clause = "matched_user_id = %s"
@@ -171,8 +178,8 @@ def pay(request: Request, token: str = Form(...)):
         reusable = conn.execute(
             f"SELECT * FROM dues.payments WHERE status = 'pending' "
             f"AND created_at > now() - interval '2 hours' AND {identity_clause} "
-            "ORDER BY id DESC LIMIT 1",
-            (identity_val,),
+            "AND amount = %s AND tshirt = %s ORDER BY id DESC LIMIT 1",
+            (identity_val, amount, wants_tshirt),
         ).fetchone()
 
         if reusable:
@@ -181,13 +188,14 @@ def pay(request: Request, token: str = Form(...)):
             reference = f"cossadues-{sanitize_ref_part(chk['student_id'])}-{uuid.uuid4().hex[:8]}"
             resp = payments_client.create_payment(
                 reference=reference,
-                amount=float(chk["amount"]),
+                amount=amount,
                 email=chk["email"],
                 redirect_url=f"{APP_BASE_URL}/receipt/{reference}",
                 metadata={
                     "student_id": chk["student_id"],
                     "full_name": chk["full_name"],
                     "match_type": chk["match_type"],
+                    "tshirt": wants_tshirt,
                 },
             )
             checkout_url = resp["checkout_url"]
@@ -200,13 +208,13 @@ def pay(request: Request, token: str = Form(...)):
                         INSERT INTO dues.payments
                             (reference, full_name, student_id, matched_user_id, match_type,
                              department, program, phone_number, email, amount, status,
-                             checkout_url, short_code)
-                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'pending',%s,%s)
+                             checkout_url, short_code, tshirt)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'pending',%s,%s,%s)
                         """,
                         (
                             reference, chk["full_name"], chk["student_id"], chk["matched_user_id"],
                             chk["match_type"], chk["department"], chk["program"], chk["phone_number"],
-                            chk["email"], chk["amount"], checkout_url, short_code,
+                            chk["email"], amount, checkout_url, short_code, wants_tshirt,
                         ),
                     )
                     break
@@ -287,6 +295,7 @@ def fulfil_payment(payment: dict):
             f"Student ID: {payment['student_id']}\n"
             f"Category: {payment['match_type']}\n"
             f"Amount: GHS {float(payment['amount']):.2f}\n"
+            f"T-shirt: {'yes' if payment['tshirt'] else 'no'}\n"
             f"Phone: {payment['phone_number']}\n"
             f"Ref: {payment['reference']}"
         )

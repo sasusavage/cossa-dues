@@ -9,6 +9,7 @@
     <tr><th>Name</th><td>{{ payment.full_name }}</td></tr>
     <tr><th>Student ID</th><td>{{ payment.student_id }}</td></tr>
     <tr><th>Amount</th><td>GHS {{ "%.2f"|format(payment.amount) }}</td></tr>
+    {% if payment.tshirt %}<tr><th>T-shirt</th><td>Included</td></tr>{% endif %}
     <tr><th>Paid at</th><td>{{ payment.paid_at }}</td></tr>
   </table>
   <p class="hint">A copy of this receipt has been sent to {{ payment.phone_number }} by SMS.</p>

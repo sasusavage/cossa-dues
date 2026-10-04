@@ -6,12 +6,31 @@
   <p class="lede">We found you as a <strong>{{ category_label }}</strong>.</p>
   <table class="summary">
     <tr><th>Name</th><td>{{ full_name }}</td></tr>
-    <tr><th>Amount due</th><td>GHS {{ "%.2f"|format(amount) }}</td></tr>
+    <tr><th>Dues</th><td>GHS {{ "%.2f"|format(amount) }}</td></tr>
   </table>
   <form method="post" action="/pay">
     <input type="hidden" name="token" value="{{ token }}">
-    <button type="submit">Proceed to pay GHS {{ "%.2f"|format(amount) }}</button>
+    {% if can_tshirt %}
+    <label class="checkbox">
+      <input type="checkbox" name="tshirt" value="1" id="tshirt">
+      Add a COSSA t-shirt (+GHS {{ "%.2f"|format(tshirt_amount) }})
+    </label>
+    {% endif %}
+    <button type="submit" id="pay-button">Proceed to pay GHS {{ "%.2f"|format(amount) }}</button>
   </form>
+  {% if can_tshirt %}
+  <script>
+    (function () {
+      var box = document.getElementById("tshirt");
+      var button = document.getElementById("pay-button");
+      var dues = {{ amount }}, shirt = {{ tshirt_amount }};
+      box.addEventListener("change", function () {
+        var total = box.checked ? dues + shirt : dues;
+        button.textContent = "Proceed to pay GHS " + total.toFixed(2);
+      });
+    })();
+  </script>
+  {% endif %}
   <p class="alt-link">Not right? <a href="/issue">Report an issue instead</a></p>
 </div>
 {% endblock %}
