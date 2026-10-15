@@ -27,6 +27,7 @@ MIGRATIONS_DIR = APP_DIR.parent / "migrations"
 MIGRATION_FILES = [
     "001_dues_schema.sql", "002_receipt_links_and_webhook_log.sql",
     "003_manual_overrides.sql", "004_expenses.sql", "005_tshirt_option.sql",
+    "006_payment_channel.sql",
 ]
 
 CONTINUING_MATCH_KINDS = ("continuing_exact", "continuing_name_only", "continuing_override")
