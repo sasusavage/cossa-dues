@@ -40,6 +40,7 @@ CONTINUING_AMOUNT = float(os.environ.get("DUES_AMOUNT_CONTINUING", "50"))
 FRESHER_AMOUNT = float(os.environ.get("DUES_AMOUNT_FRESHER", "100"))
 TSHIRT_AMOUNT = float(os.environ.get("TSHIRT_AMOUNT", "55"))
 APP_BASE_URL = os.environ.get("APP_BASE_URL", "").rstrip("/")
+VP_PHONE = os.environ.get("VP_PHONE", "+233 53 796 8305")
 
 
 def generate_short_code(length: int = 7) -> str:
@@ -65,9 +66,13 @@ def main() -> None:
     student_id = args.student_id.strip()
     full_name = args.full_name.strip()
     phone = args.phone.strip()
-    wants_tshirt = args.tshirt and args.category == "continuing"
+    # A fresher's GHS 100 already includes a t-shirt; continuing students only get one,
+    # and only pay extra for it, if --tshirt is passed.
+    is_fresher = args.category == "fresher"
+    tshirt_addon = args.tshirt and not is_fresher
+    wants_tshirt = is_fresher or tshirt_addon
     base_amount = CONTINUING_AMOUNT if args.category == "continuing" else FRESHER_AMOUNT
-    amount = base_amount + (TSHIRT_AMOUNT if wants_tshirt else 0)
+    amount = base_amount + (TSHIRT_AMOUNT if tshirt_addon else 0)
 
     with psycopg.connect(os.environ["DATABASE_URL"], row_factory=dict_row, connect_timeout=30) as conn:
         # Make sure the channel column exists even if this runs before a deploy picks up the migration.
@@ -138,6 +143,8 @@ def main() -> None:
     if not args.no_sms:
         link = f"{APP_BASE_URL}/r/{payment['short_code']}"
         message = f"COSSA Dues: GHS {amount:.2f} received (cash). Receipt: {link}"
+        if wants_tshirt:
+            message += f" Your t-shirt is ready - contact the VP on {VP_PHONE} to collect it."
         try:
             sms_client.send_sms(phone, message)
             with psycopg.connect(os.environ["DATABASE_URL"], connect_timeout=30) as conn2:

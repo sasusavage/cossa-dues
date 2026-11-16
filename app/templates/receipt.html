@@ -13,6 +13,9 @@
     <tr><th>Paid at</th><td>{{ payment.paid_at }}</td></tr>
   </table>
   <p class="hint">A copy of this receipt has been sent to {{ payment.phone_number }} by SMS.</p>
+  {% if payment.tshirt %}
+  <p class="hint">Your t-shirt is ready — contact the Vice President to collect it.</p>
+  {% endif %}
   <button class="secondary" onclick="window.print()">Print / save receipt</button>
 </div>
 {% endblock %}

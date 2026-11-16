@@ -40,16 +40,10 @@ GREEN = colors.HexColor("#1e7b34")
 AMBER = colors.HexColor("#b7791f")
 RED = colors.HexColor("#c0392b")
 
-# Expenses paid out but not yet recorded in dues.expenses. Remove an entry
-# once it has been inserted into the table, or it will be counted twice.
-EXTRA_EXPENSES = [
-    {
-        "spent_at": datetime(2026, 10, 1),
-        "paid_to": "Zadok Nana Kwasi Akpah",
-        "reason": "Refreshments for the lectures",
-        "amount": Decimal("200.00"),
-    },
-]
+# Expenses paid out but not yet recorded in dues.expenses. Add an entry here
+# only until it's been inserted into the table, then remove it, or it will be
+# counted twice.
+EXTRA_EXPENSES = []
 
 CATEGORY_LABELS = {
     "continuing_exact": "Continuing",

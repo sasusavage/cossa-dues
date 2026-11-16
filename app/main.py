@@ -27,7 +27,7 @@ MIGRATIONS_DIR = APP_DIR.parent / "migrations"
 MIGRATION_FILES = [
     "001_dues_schema.sql", "002_receipt_links_and_webhook_log.sql",
     "003_manual_overrides.sql", "004_expenses.sql", "005_tshirt_option.sql",
-    "006_payment_channel.sql",
+    "006_payment_channel.sql", "007_tshirt_collection.sql",
 ]
 
 CONTINUING_MATCH_KINDS = ("continuing_exact", "continuing_name_only", "continuing_override")
@@ -35,6 +35,7 @@ CONTINUING_MATCH_KINDS = ("continuing_exact", "continuing_name_only", "continuin
 CONTINUING_AMOUNT = float(os.environ.get("DUES_AMOUNT_CONTINUING", "50"))
 FRESHER_AMOUNT = float(os.environ.get("DUES_AMOUNT_FRESHER", "100"))
 TSHIRT_AMOUNT = float(os.environ.get("TSHIRT_AMOUNT", "55"))
+VP_PHONE = os.environ.get("VP_PHONE", "+233 53 796 8305")
 APP_BASE_URL = os.environ.get("APP_BASE_URL", "").rstrip("/")
 
 # Excludes 0/O/1/l/I so a code read out or texted never gets misread.
@@ -157,9 +158,12 @@ def pay(request: Request, token: str = Form(...), tshirt: str = Form("")):
                 "index.html", {"request": request, "error": "That check has expired — please try again."}
             )
 
-        # T-shirts are only offered to continuing students; freshers collect theirs from the VP.
-        wants_tshirt = bool(tshirt) and chk["match_type"] in CONTINUING_MATCH_KINDS
-        amount = float(chk["amount"]) + (TSHIRT_AMOUNT if wants_tshirt else 0)
+        # A fresher's GHS 100 already includes a t-shirt — no add-on or extra charge for
+        # them. Continuing students only get one if they tick the add-on, which does cost extra.
+        is_fresher = chk["match_type"] not in CONTINUING_MATCH_KINDS
+        tshirt_addon = bool(tshirt) and not is_fresher
+        wants_tshirt = is_fresher or tshirt_addon  # eligible for a shirt, regardless of who pays extra for it
+        amount = float(chk["amount"]) + (TSHIRT_AMOUNT if tshirt_addon else 0)
 
         if chk["matched_user_id"]:
             identity_clause = "matched_user_id = %s"
@@ -280,6 +284,8 @@ def short_receipt_link(code: str):
 def fulfil_payment(payment: dict):
     link = f"{APP_BASE_URL}/r/{payment['short_code']}"
     message = f"COSSA Dues: GHS {float(payment['amount']):.2f} received. Receipt: {link}"
+    if payment["tshirt"]:
+        message += f" Your t-shirt is ready - contact the VP on {VP_PHONE} to collect it."
     if len(message) > 160:
         log.warning("SMS receipt for %s is %d chars — will bill as 2+ segments", payment["reference"], len(message))
     try:
