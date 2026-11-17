@@ -317,7 +317,12 @@ def fulfil_payment(payment: dict):
 @app.post("/webhooks/sasusync/payment")
 async def sasusync_webhook(request: Request, background_tasks: BackgroundTasks):
     raw = await request.body()
-    secret = os.environ["SASUSYNC_WEBHOOK_SECRET"]
+    secret = os.environ.get("SASUSYNC_WEBHOOK_SECRET", "").strip()
+    if not secret:
+        # An empty key signs anything anyone cares to compute: a forged
+        # "payment.succeeded" would mark dues as paid. Refuse everything.
+        log.error("SASUSYNC_WEBHOOK_SECRET is not set - refusing payment webhooks")
+        return {"status": 0}
     expected = hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
     signature = request.headers.get("X-Webhook-Signature", "")
     verified = hmac.compare_digest(signature, expected)
